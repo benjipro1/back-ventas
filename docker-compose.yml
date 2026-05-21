@@ -1,0 +1,57 @@
+services:
+
+  # ================================
+  # Base de datos MySQL
+  # ================================
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_ventas
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      # Named volume: los datos persisten aunque el contenedor se reinicie
+      # Se elige named volume sobre bind mount por portabilidad y mejor
+      # rendimiento en Linux. Docker gestiona la ubicación automáticamente.
+      - mysql_ventas_data:/var/lib/mysql
+    networks:
+      - ventas_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ================================
+  # Backend Spring Boot Ventas
+  # ================================
+  backend-ventas:
+    image: ${DOCKERHUB_USERNAME}/back-ventas:latest
+    container_name: backend_ventas
+    restart: unless-stopped
+    environment:
+      DB_ENDPOINT: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - ventas_network
+
+volumes:
+  mysql_ventas_data:
+    driver: local
+
+networks:
+  ventas_network:
+    driver: bridge
