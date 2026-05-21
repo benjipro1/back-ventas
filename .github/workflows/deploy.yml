@@ -1,4 +1,4 @@
-name: CI/CD Backend Ventas
+﻿name: CI/CD Backend Ventas
 
 on:
   push:
@@ -46,15 +46,14 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Conectarse desde el Frontend al EC2 Data via SSH interno
-            ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_DATA_HOST }} << 'ENDSSH'
+            ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_DATA_HOST }} "
               cd ~/app/ventas
-              echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" > .env
-              echo "DB_NAME=${{ secrets.DB_VENTAS_NAME }}" >> .env
-              echo "DB_USERNAME=${{ secrets.DB_VENTAS_USERNAME }}" >> .env
-              echo "DB_PASSWORD=${{ secrets.DB_VENTAS_PASSWORD }}" >> .env
-              echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_VENTAS_ROOT_PASSWORD }}" >> .env
+              echo DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }} > .env
+              echo DB_NAME=${{ secrets.DB_VENTAS_NAME }} >> .env
+              echo DB_USERNAME=${{ secrets.DB_VENTAS_USERNAME }} >> .env
+              echo DB_PASSWORD=${{ secrets.DB_VENTAS_PASSWORD }} >> .env
+              echo MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_VENTAS_ROOT_PASSWORD }} >> .env
               docker compose pull backend-ventas
               docker compose up -d --force-recreate backend-ventas
               docker image prune -f
-            ENDSSH
+            "
