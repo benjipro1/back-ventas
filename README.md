@@ -1,97 +1,72 @@
-# Backend - API REST Ventas 🛒
+# Backend — API REST Ventas 🛒
 
 API REST desarrollada con **Spring Boot 3.4.4** y **Java 17** para la gestión de ventas de Innovatech Chile.
 
 ---
 
-## 🏗️ Arquitectura
+## 🏗️ Arquitectura de despliegue (EP3/EFT — ECS Fargate)
 
 ```
-EC2 Data (subred privada)
-│
-├── Contenedor: backend_ventas (puerto 8080)
-│   └── Spring Boot API REST Ventas
-│
-└── Contenedor: mysql_ventas (puerto 3306)
-    └── MySQL 8.0
-        └── Named Volume: mysql_ventas_data (persistencia)
+Internet
+   │
+   ▼
+Application Load Balancer (innovatech-alb)
+   │  ruta: /api/v1/ventas*
+   ▼
+ECS Fargate — Service: innovatech-svc-ventas
+   │  Task Definition: innovatech-ventas (CPU 512 / 1024 MB)
+   │  Container: ventas (puerto 8080)
+   ▼
+Amazon RDS MySQL (innovatech-db) — esquema ventas_db
 ```
+
+- **Orquestación:** Amazon ECS con capacity provider Fargate (sin servidores que administrar).
+- **Autoscaling:** Target Tracking por CPU (objetivo 50%), min 1 / max 3 tasks.
+- **Imagen:** publicada en Amazon ECR (`innovatech-ventas`), con escaneo de vulnerabilidades automático (`scanOnPush`).
+- **Secrets:** credenciales de base de datos gestionadas por AWS Secrets Manager, inyectadas como `secrets` en la Task Definition (nunca en texto plano).
+- **Observabilidad:** logs en CloudWatch (`/ecs/innovatech-ventas`).
+- **Health check:** Spring Boot Actuator expuesto en `/actuator/health`.
+
+> Este servicio comparte la instancia RDS con `back-despachos` (un esquema independiente cada uno: `ventas_db` / `despachos_db`).
 
 ---
 
 ## ⚙️ Variables de entorno
 
-Crear `.env` basado en `.env.example`:
-
-```env
-DOCKERHUB_USERNAME=tu_usuario
-DB_NAME=ventas_db
-DB_USERNAME=ventas_user
-DB_PASSWORD=password_seguro
-MYSQL_ROOT_PASSWORD=root_password_seguro
-```
+| Variable | Origen | Descripción |
+|---|---|---|
+| `DB_ENDPOINT` | Task Definition (`environment`) | Endpoint de la instancia RDS |
+| `DB_PORT` | Task Definition (`environment`) | Puerto de MySQL (3306) |
+| `DB_NAME` | Task Definition (`environment`) | `ventas_db` |
+| `DB_USERNAME` | Task Definition (`secrets`) | Desde AWS Secrets Manager |
+| `DB_PASSWORD` | Task Definition (`secrets`) | Desde AWS Secrets Manager |
 
 ---
 
-## 🚀 Levantar con Docker Compose
+## 🐳 Desarrollo local
 
 ```bash
-cp .env.example .env
-# Editar .env con valores reales
-docker compose up -d
-docker compose logs -f backend-ventas
+docker compose up --build
 ```
 
 ---
 
-## 🐳 Dockerfile (multi-stage)
+## 🔄 CI/CD
 
-| Etapa | Imagen base | Propósito |
-|-------|-------------|-----------|
-| `builder` | `maven:3.9.6-eclipse-temurin-17` | Compila y genera el JAR |
-| `runtime` | `eclipse-temurin:17-jre-alpine` | Corre el JAR con mínimo peso |
+El pipeline (`.github/workflows/deploy.yml`) se dispara en cada push a la rama `deploy`:
 
-**Buenas prácticas:** multi-stage, usuario no-root, cache de dependencias Maven.
+1. Tests unitarios con Maven (incluye `VentaServiceTest`; excluye el test de carga de contexto que requiere RDS real).
+2. Build de la imagen Docker.
+3. Push a Amazon ECR (tags `latest` y hash del commit).
+4. Registro de nueva revisión de la Task Definition.
+5. Deploy automático al servicio ECS, esperando estabilidad.
 
----
-
-## 💾 Persistencia
-
-Named volume `mysql_ventas_data` para MySQL. Se elige sobre bind mount por portabilidad y mejor rendimiento en Linux.
+**Secrets requeridos en GitHub:** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (credenciales temporales de AWS Academy Learner Lab).
 
 ---
 
-## 🔄 Pipeline CI/CD
+## 📚 Endpoints principales
 
-El pipeline se activa con push a rama `deploy`:
-1. **Build** → compila JAR con Maven
-2. **Push** → sube imagen a Docker Hub
-3. **Deploy** → SSH al Frontend → SSH interno al EC2 Data → actualiza contenedor
+Base path: `/api/v1/ventas`
 
-### Secrets requeridos en GitHub
-
-| Secret | Descripción |
-|--------|-------------|
-| `DOCKERHUB_USERNAME` | Usuario Docker Hub |
-| `DOCKERHUB_TOKEN` | Token Docker Hub |
-| `EC2_FRONTEND_HOST` | IP pública EC2 Frontend (jump host) |
-| `EC2_DATA_HOST` | IP privada EC2 Data |
-| `EC2_USERNAME` | Usuario SSH (`ec2-user`) |
-| `EC2_SSH_KEY` | Clave privada SSH (.pem) |
-| `DB_VENTAS_NAME` | Nombre BD |
-| `DB_VENTAS_USERNAME` | Usuario BD |
-| `DB_VENTAS_PASSWORD` | Contraseña BD |
-| `MYSQL_VENTAS_ROOT_PASSWORD` | Root password MySQL |
-
----
-
-## 📡 Endpoints
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/ventas` | Listar todas las ventas |
-| GET | `/api/v1/ventas/{id}` | Obtener venta por ID |
-| POST | `/api/v1/ventas` | Crear venta |
-| PUT | `/api/v1/ventas/{id}` | Actualizar venta |
-| DELETE | `/api/v1/ventas/{id}` | Eliminar venta |
-| GET | `/swagger-ui.html` | Documentación Swagger |
+Documentación interactiva (Swagger/OpenAPI) disponible en `/swagger-ui.html`.
