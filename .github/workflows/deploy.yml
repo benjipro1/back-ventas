@@ -28,8 +28,8 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Ejecutar tests unitarios
-        run: mvn test -B
+      - name: Ejecutar tests unitarios (excluye contextLoads, requiere DB real inalcanzable desde el runner)
+        run: mvn test -Dtest='!*ApplicationTests' -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -B
 
       - name: Build con Maven (sin tests, ya se ejecutaron arriba)
         run: mvn clean package -DskipTests -B
@@ -77,3 +77,4 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           service: ${{ env.ECS_SERVICE }}
           wait-for-service-stability: true
+          wait-for-minutes: 15
